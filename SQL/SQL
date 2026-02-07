@@ -1,0 +1,258 @@
+CREATE DATABASE smartstock_dev;
+USE smartstock_dev;
+
+CREATE TABLE products (
+                          product_id INT AUTO_INCREMENT PRIMARY KEY,
+                          name VARCHAR(100) NOT NULL,
+                          sku VARCHAR(50) UNIQUE NOT NULL,
+                          price DECIMAL(10,2) NOT NULL,
+                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE locations (
+                           location_id INT AUTO_INCREMENT PRIMARY KEY,
+                           name VARCHAR(100) NOT NULL,
+                           address VARCHAR(255),
+                           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE inventory (
+                           inventory_id INT AUTO_INCREMENT PRIMARY KEY,
+                           product_id INT NOT NULL,
+                           location_id INT NOT NULL,
+                           quantity_on_hand INT NOT NULL DEFAULT 0,
+                           reorder_level INT NOT NULL DEFAULT 0,
+                           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+                           CONSTRAINT fk_inventory_product
+                               FOREIGN KEY (product_id) REFERENCES products(product_id)
+                                   ON DELETE RESTRICT ON UPDATE CASCADE,
+
+                           CONSTRAINT fk_inventory_location
+                               FOREIGN KEY (location_id) REFERENCES locations(location_id)
+                                   ON DELETE RESTRICT ON UPDATE CASCADE,
+
+                           CONSTRAINT uq_inventory_product_location UNIQUE (product_id, location_id),
+
+                           CONSTRAINT chk_inventory_qty_nonnegative CHECK (quantity_on_hand >= 0),
+                           CONSTRAINT chk_inventory_reorder_nonnegative CHECK (reorder_level >= 0)
+);
+
+CREATE TABLE inventory_movements (
+                                     movement_id INT AUTO_INCREMENT PRIMARY KEY,
+                                     product_id INT NOT NULL,
+                                     location_id INT NOT NULL,
+                                     change_qty INT NOT NULL, -- positive for restock, negative for sale/usage
+                                     reason ENUM('RESTOCK','SALE','ADJUSTMENT','RETURN','TRANSFER_IN','TRANSFER_OUT') NOT NULL,
+                                     note VARCHAR(255),
+                                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                                     CONSTRAINT fk_mov_product
+                                         FOREIGN KEY (product_id) REFERENCES products(product_id)
+                                             ON DELETE RESTRICT ON UPDATE CASCADE,
+
+                                     CONSTRAINT fk_mov_location
+                                         FOREIGN KEY (location_id) REFERENCES locations(location_id)
+                                             ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+DELIMITER $$
+
+CREATE TRIGGER trg_inventory_movements_after_insert
+    AFTER INSERT ON inventory_movements
+    FOR EACH ROW
+BEGIN
+    -- Ensure an inventory row exists (product + location)
+    INSERT INTO inventory (product_id, location_id, quantity_on_hand, reorder_level)
+    VALUES (NEW.product_id, NEW.location_id, 0, 0)
+    ON DUPLICATE KEY UPDATE inventory_id = inventory_id;
+
+    -- Apply the change
+    UPDATE inventory
+    SET quantity_on_hand = quantity_on_hand + NEW.change_qty
+    WHERE product_id = NEW.product_id
+      AND location_id = NEW.location_id;
+END$$
+
+DELIMITER ;
+
+
+-- low stock view
+CREATE VIEW low_stock AS
+SELECT
+    p.product_id, p.name, p.sku,
+    i.location_id, i.quantity_on_hand, i.reorder_level
+FROM inventory i
+         JOIN products p ON p.product_id = i.product_id
+WHERE i.quantity_on_hand <= i.reorder_level;
+
+-- receipt/transaction
+CREATE TABLE sales (
+                       sale_id INT AUTO_INCREMENT PRIMARY KEY,
+                       location_id INT NOT NULL,
+                       sale_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                       status ENUM('OPEN','COMPLETED','VOID') NOT NULL DEFAULT 'OPEN',
+
+                       CONSTRAINT fk_sales_location
+                           FOREIGN KEY (location_id) REFERENCES locations(location_id)
+                               ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- what was sold
+CREATE TABLE sale_items (
+                            sale_item_id INT AUTO_INCREMENT PRIMARY KEY,
+                            sale_id INT NOT NULL,
+                            product_id INT NOT NULL,
+                            quantity INT NOT NULL,
+                            unit_price DECIMAL(10,2) NOT NULL,
+
+                            CONSTRAINT fk_sale_items_sale
+                                FOREIGN KEY (sale_id) REFERENCES sales(sale_id)
+                                    ON DELETE CASCADE ON UPDATE CASCADE,
+
+                            CONSTRAINT fk_sale_items_product
+                                FOREIGN KEY (product_id) REFERENCES products(product_id)
+                                    ON DELETE RESTRICT ON UPDATE CASCADE,
+
+                            CONSTRAINT chk_sale_items_qty_positive CHECK (quantity > 0),
+                            CONSTRAINT chk_sale_items_price_nonnegative CHECK (unit_price >= 0)
+);
+
+-- reduce inventory when sale item is added
+DELIMITER $$
+
+CREATE TRIGGER trg_sale_items_after_insert
+    AFTER INSERT ON sale_items
+    FOR EACH ROW
+BEGIN
+    DECLARE sale_loc INT;
+
+    SELECT location_id INTO sale_loc
+    FROM sales
+    WHERE sale_id = NEW.sale_id;
+
+    INSERT INTO inventory_movements (product_id, location_id, change_qty, reason, note)
+    VALUES (NEW.product_id, sale_loc, -NEW.quantity, 'SALE', CONCAT('sale_id=', NEW.sale_id));
+END$$
+
+DELIMITER ;
+
+-- update sales total amount
+DELIMITER $$
+
+CREATE TRIGGER trg_sale_items_after_insert_total
+    AFTER INSERT ON sale_items
+    FOR EACH ROW
+BEGIN
+    UPDATE sales s
+    SET total_amount = (
+        SELECT IFNULL(SUM(quantity * unit_price), 0)
+        FROM sale_items
+        WHERE sale_id = NEW.sale_id
+    )
+    WHERE s.sale_id = NEW.sale_id;
+END$$
+
+DELIMITER ;
+
+
+-- adjusts inventory and total when sale item is updated
+DELIMITER $$
+
+CREATE TRIGGER trg_sale_items_after_update
+    AFTER UPDATE ON sale_items
+    FOR EACH ROW
+BEGIN
+    DECLARE sale_loc INT;
+    DECLARE diff_qty INT;
+
+    SELECT location_id INTO sale_loc
+    FROM sales
+    WHERE sale_id = NEW.sale_id;
+
+    SET diff_qty = NEW.quantity - OLD.quantity;
+
+    -- If quantity increased, inventory should decrease more (more sold)
+    -- If quantity decreased, inventory increases back (less sold)
+    IF diff_qty <> 0 THEN
+        INSERT INTO inventory_movements (product_id, location_id, change_qty, reason, note)
+        VALUES (NEW.product_id, sale_loc, -diff_qty, 'ADJUSTMENT',
+                CONCAT('sale_item_update sale_id=', NEW.sale_id, ' item_id=', NEW.sale_item_id));
+    END IF;
+
+    -- Recompute total
+    UPDATE sales s
+    SET total_amount = (
+        SELECT IFNULL(SUM(quantity * unit_price), 0)
+        FROM sale_items
+        WHERE sale_id = NEW.sale_id
+    )
+    WHERE s.sale_id = NEW.sale_id;
+END$$
+
+DELIMITER ;
+
+
+-- update total and inventory when sale item is deleted
+DELIMITER $$
+
+CREATE TRIGGER trg_sale_items_after_delete
+    AFTER DELETE ON sale_items
+    FOR EACH ROW
+BEGIN
+    DECLARE sale_loc INT;
+
+    SELECT location_id INTO sale_loc
+    FROM sales
+    WHERE sale_id = OLD.sale_id;
+
+    -- Add inventory back (reverse the sale of that item)
+    INSERT INTO inventory_movements (product_id, location_id, change_qty, reason, note)
+    VALUES (OLD.product_id, sale_loc, OLD.quantity, 'ADJUSTMENT',
+            CONCAT('sale_item_delete sale_id=', OLD.sale_id, ' item_id=', OLD.sale_item_id));
+
+    -- Recompute total
+    UPDATE sales s
+    SET total_amount = (
+        SELECT IFNULL(SUM(quantity * unit_price), 0)
+        FROM sale_items
+        WHERE sale_id = OLD.sale_id
+    )
+    WHERE s.sale_id = OLD.sale_id;
+END$$
+
+DELIMITER ;
+
+
+-- receipt output
+CREATE VIEW sale_receipt AS
+SELECT
+    s.sale_id,
+    s.sale_datetime,
+    s.location_id,
+    s.status,
+    p.sku,
+    p.name AS product_name,
+    si.quantity,
+    si.unit_price,
+    (si.quantity * si.unit_price) AS line_total,
+    s.total_amount
+FROM sales s
+         JOIN sale_items si ON si.sale_id = s.sale_id
+         JOIN products p ON p.product_id = si.product_id;
+
+
+-- categories
+CREATE TABLE categories (
+                            category_id INT AUTO_INCREMENT PRIMARY KEY,
+                            name VARCHAR(100) NOT NULL UNIQUE,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- link products and categories
+ALTER TABLE products
+    ADD category_id INT NULL,
+    ADD CONSTRAINT fk_products_category
+        FOREIGN KEY (category_id) REFERENCES categories(category_id)
+            ON DELETE SET NULL
+            ON UPDATE CASCADE;
