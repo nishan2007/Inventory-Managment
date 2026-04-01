@@ -21,29 +21,39 @@ public class MakeASale extends JFrame {
    public MakeASale() {
        //Window Setup
        setTitle("Make a Sale");
+      // setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+      // setExtendedState(JFrame.MAXIMIZED_BOTH);
        setSize(1000, 600);
        setLocationRelativeTo(null);
        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+       setJMenuBar(AppMenuBar.create(this, "MakeASale"));
 
        // Main container
        JPanel panel = new JPanel(new BorderLayout(10, 10));
        panel.setBorder(BorderFactory.createEmptyBorder(15,15,15,15));
 
        // Search area
-       JPanel searchPanel = new JPanel(new GridLayout(2, 3, 10, 10));
+       JPanel searchPanel = new JPanel(new BorderLayout(10, 10));
+
        newItemBtn = new JButton("New Item");
        JLabel searchLabel = new JLabel("Search Product");
        searchField = new JTextField();
        searchBtn = new JButton("Search");
        selectedStoreLabel = new JLabel("Store: Not selected");
 
-       searchPanel.add(newItemBtn);
-       searchPanel.add(searchLabel);
-       searchPanel.add(searchField);
-       searchPanel.add(searchBtn);
-       searchPanel.add(selectedStoreLabel);
-       searchPanel.add(new JLabel(""));
-       searchPanel.add(new JLabel(""));
+        // Top row (store + new item)
+       JPanel topRow = new JPanel(new BorderLayout(10, 10));
+       topRow.add(selectedStoreLabel, BorderLayout.WEST);
+       topRow.add(newItemBtn, BorderLayout.EAST);
+
+        // Search row (THIS is the important part)
+       JPanel searchRow = new JPanel(new BorderLayout(10, 10));
+       searchRow.add(searchLabel, BorderLayout.WEST);
+       searchRow.add(searchField, BorderLayout.CENTER); // EXPANDS
+       searchRow.add(searchBtn, BorderLayout.EAST);
+
+       searchPanel.add(topRow, BorderLayout.NORTH);
+       searchPanel.add(searchRow, BorderLayout.SOUTH);
 
        // Cart table
        cartModel = new DefaultTableModel(
