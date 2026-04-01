@@ -7,8 +7,8 @@ public class Main {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {}
             new WelcomeFrame().setVisible(true);
-            new MakeASale().setVisible(true);
             new NewItem().setVisible(true);
+            new EmployeeManagement().setVisible(true);
         });
     }
 }

@@ -15,9 +15,7 @@ public class MakeASale extends JFrame {
     private JLabel totalLabel;
     private JComboBox<String> paymentMethodBox;
     private JButton checkoutBtn;
-    private Integer selectedLocationId;
     private JLabel selectedStoreLabel;
-    private JButton changeStoreBtn;
 
    public MakeASale() {
        //Window Setup
@@ -36,14 +34,13 @@ public class MakeASale extends JFrame {
        searchField = new JTextField();
        searchBtn = new JButton("Search");
        selectedStoreLabel = new JLabel("Store: Not selected");
-       changeStoreBtn = new JButton("Change Store");
 
        searchPanel.add(searchLabel);
        searchPanel.add(searchField);
        searchPanel.add(searchBtn);
        searchPanel.add(selectedStoreLabel);
        searchPanel.add(new JLabel(""));
-       searchPanel.add(changeStoreBtn);
+       searchPanel.add(new JLabel(""));
 
        // Cart table
        cartModel = new DefaultTableModel(
@@ -102,19 +99,18 @@ public class MakeASale extends JFrame {
                checkout();
            }
        });
-       changeStoreBtn.addActionListener(new ActionListener() {
-           public void actionPerformed(ActionEvent e) {
-               selectStore();
-           }
-       });
-       selectStore(); //runs first
-       updateSelectedStoreLabel(); //runs second
+       updateSelectedStoreLabel();
        setVisible(true); //runs last for the main UI to show
    }
 
 
     private void Search() {
         String searchText = searchField.getText().trim();
+
+        if (Login.currentLocationId == null) {
+            JOptionPane.showMessageDialog(this, "No store is selected for this session.");
+            return;
+        }
 
         if (searchText.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Type a product name or SKU first.");
@@ -123,19 +119,21 @@ public class MakeASale extends JFrame {
 
         String sql = """
             SELECT p.product_id, p.name, p.sku, p.price,
-                   COALESCE(SUM(i.quantity_on_hand), 0) AS quantity_on_hand
+                   COALESCE(i.quantity_on_hand, 0) AS quantity_on_hand
             FROM products p
-            LEFT JOIN inventory i ON p.product_id = i.product_id
+            LEFT JOIN inventory i
+                ON p.product_id = i.product_id
+               AND i.location_id = ?
             WHERE p.name LIKE ? OR p.sku LIKE ?
-            GROUP BY p.product_id, p.name, p.sku, p.price
             ORDER BY p.name
             """;
 
         try (Connection conn = DB.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setString(1, "%" + searchText + "%");
+            ps.setInt(1, Login.currentLocationId);
             ps.setString(2, "%" + searchText + "%");
+            ps.setString(3, "%" + searchText + "%");
 
             ResultSet rs = ps.executeQuery();
 
@@ -276,65 +274,15 @@ public class MakeASale extends JFrame {
         return total;
     }
 
-    private Integer promptForLocationId(Connection conn) throws SQLException {
-        String codeText = JOptionPane.showInputDialog(this, "Enter store code:");
-
-        if (codeText == null) {
-            return null;
-        }
-
-        codeText = codeText.trim();
-
-        if (codeText.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Store code is required.");
-            return null;
-        }
-
-        int locationId;
-        try {
-            locationId = Integer.parseInt(codeText);
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Store code must be a number.");
-            return null;
-        }
-
-        String sql = "SELECT location_id, name FROM locations WHERE location_id = ?";
-
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, locationId);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("location_id");
-                } else {
-                    JOptionPane.showMessageDialog(this, "Store code not found.");
-                    return null;
-                }
-            }
-        }
-    }
-
-    private void selectStore() {
-        try (Connection conn = DB.getConnection()) {
-            Integer locationId = promptForLocationId(conn);
-            if (locationId != null) {
-                selectedLocationId = locationId;
-                updateSelectedStoreLabel();
-            }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Failed to load store: " + ex.getMessage());
-        }
-    }
-
     private void updateSelectedStoreLabel() {
         if (selectedStoreLabel == null) {
             return;
         }
 
-        if (selectedLocationId == null) {
+        if (Login.currentLocationId == null || Login.currentLocationName == null) {
             selectedStoreLabel.setText("Store: Not selected");
         } else {
-            selectedStoreLabel.setText("Store Code: " + selectedLocationId);
+            selectedStoreLabel.setText("Store: " + Login.currentLocationName + " (ID: " + Login.currentLocationId + ")");
         }
     }
 
@@ -349,13 +297,13 @@ public class MakeASale extends JFrame {
         try (Connection conn = DB.getConnection()) {
             conn.setAutoCommit(false);
 
-            if (selectedLocationId == null) {
+            if (Login.currentLocationId == null) {
                 conn.setAutoCommit(true);
-                JOptionPane.showMessageDialog(this, "Please select a store first.");
+                JOptionPane.showMessageDialog(this, "No store is selected for this session.");
                 return;
             }
 
-            int locationId = selectedLocationId;
+            int locationId = Login.currentLocationId;
 
             try {
                 String insertSaleSql = "INSERT INTO sales (location_id, total_amount, status, payment_method) VALUES (?, ?, ?, ?)";

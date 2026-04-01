@@ -23,8 +23,7 @@ public class WelcomeFrame extends JFrame {
         continueBtn.setEnabled(false);
 
         testBtn.addActionListener(e -> testConnection());
-        continueBtn.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "Next: open Main Dashboard (Products / Inventory / Sales)."));
+        continueBtn.addActionListener(e -> new Login().setVisible(true));
 
         JPanel top = new JPanel();
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
