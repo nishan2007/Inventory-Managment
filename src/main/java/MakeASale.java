@@ -16,6 +16,7 @@ public class MakeASale extends JFrame {
     private JComboBox<String> paymentMethodBox;
     private JButton checkoutBtn;
     private JLabel selectedStoreLabel;
+    private JButton newItemBtn;
 
    public MakeASale() {
        //Window Setup
@@ -30,11 +31,13 @@ public class MakeASale extends JFrame {
 
        // Search area
        JPanel searchPanel = new JPanel(new GridLayout(2, 3, 10, 10));
+       newItemBtn = new JButton("New Item");
        JLabel searchLabel = new JLabel("Search Product");
        searchField = new JTextField();
        searchBtn = new JButton("Search");
        selectedStoreLabel = new JLabel("Store: Not selected");
 
+       searchPanel.add(newItemBtn);
        searchPanel.add(searchLabel);
        searchPanel.add(searchField);
        searchPanel.add(searchBtn);
@@ -76,6 +79,11 @@ public class MakeASale extends JFrame {
        add(panel);
 
        //Action Listeners
+       newItemBtn.addActionListener(new ActionListener() {
+           public void actionPerformed(ActionEvent e) {
+              new NewItem().setVisible(true);
+           }
+       });
        searchBtn.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
                Search();
