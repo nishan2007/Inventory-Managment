@@ -4,10 +4,9 @@ import java.sql.SQLException;
 
 public final class DB {
     // TODO: change if needed
-    private static final String URL =
-            "jdbc:mysql://127.0.0.1:3306/smartstock_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-    private static final String USER = "smartstock_user";
-    private static final String PASSWORD = "password123";
+    private static final String URL = "jdbc:mysql://sql5.freesqldatabase.com:3306/sql5821878";
+    private static final String USER = "sql5821878";
+    private static final String PASSWORD = "wWUf4wqUc3";
 
     private DB() {}
 

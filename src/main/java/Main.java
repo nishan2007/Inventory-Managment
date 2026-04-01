@@ -8,6 +8,7 @@ public class Main {
             } catch (Exception ignored) {}
             new WelcomeFrame().setVisible(true);
             new MakeASale().setVisible(true);
+            new NewItem().setVisible(true);
         });
     }
 }

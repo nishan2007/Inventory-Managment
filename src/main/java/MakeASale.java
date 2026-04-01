@@ -15,6 +15,9 @@ public class MakeASale extends JFrame {
     private JLabel totalLabel;
     private JComboBox<String> paymentMethodBox;
     private JButton checkoutBtn;
+    private Integer selectedLocationId;
+    private JLabel selectedStoreLabel;
+    private JButton changeStoreBtn;
 
    public MakeASale() {
        //Window Setup
@@ -28,14 +31,19 @@ public class MakeASale extends JFrame {
        panel.setBorder(BorderFactory.createEmptyBorder(15,15,15,15));
 
        // Search area
-       JPanel searchPanel = new JPanel(new GridLayout(1, 3, 10, 10));
+       JPanel searchPanel = new JPanel(new GridLayout(2, 3, 10, 10));
        JLabel searchLabel = new JLabel("Search Product");
        searchField = new JTextField();
        searchBtn = new JButton("Search");
+       selectedStoreLabel = new JLabel("Store: Not selected");
+       changeStoreBtn = new JButton("Change Store");
 
        searchPanel.add(searchLabel);
        searchPanel.add(searchField);
        searchPanel.add(searchBtn);
+       searchPanel.add(selectedStoreLabel);
+       searchPanel.add(new JLabel(""));
+       searchPanel.add(changeStoreBtn);
 
        // Cart table
        cartModel = new DefaultTableModel(
@@ -76,6 +84,11 @@ public class MakeASale extends JFrame {
                Search();
            }
        });
+       searchField.addActionListener(new ActionListener() {
+           public void actionPerformed(ActionEvent e) {
+               Search();
+           }
+       });
        cartModel.addTableModelListener(e -> {
            if (updatingCart) {
                return;
@@ -89,7 +102,14 @@ public class MakeASale extends JFrame {
                checkout();
            }
        });
-       setVisible(true);
+       changeStoreBtn.addActionListener(new ActionListener() {
+           public void actionPerformed(ActionEvent e) {
+               selectStore();
+           }
+       });
+       selectStore(); //runs first
+       updateSelectedStoreLabel(); //runs second
+       setVisible(true); //runs last for the main UI to show
    }
 
 
@@ -102,10 +122,12 @@ public class MakeASale extends JFrame {
         }
 
         String sql = """
-            SELECT p.product_id, p.name, p.sku, p.price, i.quantity_on_hand
+            SELECT p.product_id, p.name, p.sku, p.price,
+                   COALESCE(SUM(i.quantity_on_hand), 0) AS quantity_on_hand
             FROM products p
-            JOIN inventory i ON p.product_id = i.product_id
+            LEFT JOIN inventory i ON p.product_id = i.product_id
             WHERE p.name LIKE ? OR p.sku LIKE ?
+            GROUP BY p.product_id, p.name, p.sku, p.price
             ORDER BY p.name
             """;
 
@@ -254,6 +276,68 @@ public class MakeASale extends JFrame {
         return total;
     }
 
+    private Integer promptForLocationId(Connection conn) throws SQLException {
+        String codeText = JOptionPane.showInputDialog(this, "Enter store code:");
+
+        if (codeText == null) {
+            return null;
+        }
+
+        codeText = codeText.trim();
+
+        if (codeText.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Store code is required.");
+            return null;
+        }
+
+        int locationId;
+        try {
+            locationId = Integer.parseInt(codeText);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Store code must be a number.");
+            return null;
+        }
+
+        String sql = "SELECT location_id, name FROM locations WHERE location_id = ?";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, locationId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("location_id");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Store code not found.");
+                    return null;
+                }
+            }
+        }
+    }
+
+    private void selectStore() {
+        try (Connection conn = DB.getConnection()) {
+            Integer locationId = promptForLocationId(conn);
+            if (locationId != null) {
+                selectedLocationId = locationId;
+                updateSelectedStoreLabel();
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Failed to load store: " + ex.getMessage());
+        }
+    }
+
+    private void updateSelectedStoreLabel() {
+        if (selectedStoreLabel == null) {
+            return;
+        }
+
+        if (selectedLocationId == null) {
+            selectedStoreLabel.setText("Store: Not selected");
+        } else {
+            selectedStoreLabel.setText("Store Code: " + selectedLocationId);
+        }
+    }
+
     private void checkout() {
         if (cartModel.getRowCount() == 0) {
             JOptionPane.showMessageDialog(this, "Cart is empty.");
@@ -265,12 +349,20 @@ public class MakeASale extends JFrame {
         try (Connection conn = DB.getConnection()) {
             conn.setAutoCommit(false);
 
+            if (selectedLocationId == null) {
+                conn.setAutoCommit(true);
+                JOptionPane.showMessageDialog(this, "Please select a store first.");
+                return;
+            }
+
+            int locationId = selectedLocationId;
+
             try {
                 String insertSaleSql = "INSERT INTO sales (location_id, total_amount, status, payment_method) VALUES (?, ?, ?, ?)";
                 int saleId;
 
                 try (PreparedStatement saleStmt = conn.prepareStatement(insertSaleSql, Statement.RETURN_GENERATED_KEYS)) {
-                    saleStmt.setInt(1, 1);
+                    saleStmt.setInt(1, locationId);
                     saleStmt.setBigDecimal(2, BigDecimal.valueOf(getOverallTotal()));
                     saleStmt.setString(3, "COMPLETED");
                     saleStmt.setString(4, paymentMethod);
@@ -285,8 +377,15 @@ public class MakeASale extends JFrame {
                 }
 
                 String insertItemSql = "INSERT INTO sale_items (sale_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)";
+                String insertMovementSql = "INSERT INTO inventory_movements (product_id, location_id, change_qty, reason, note) VALUES (?, ?, ?, ?, ?)";
+                String ensureInventorySql = "INSERT INTO inventory (product_id, location_id, quantity_on_hand, reorder_level) VALUES (?, ?, 0, 0) ON DUPLICATE KEY UPDATE inventory_id = inventory_id";
+                String updateInventorySql = "UPDATE inventory SET quantity_on_hand = quantity_on_hand - ? WHERE product_id = ? AND location_id = ?";
 
-                try (PreparedStatement itemStmt = conn.prepareStatement(insertItemSql)) {
+                try (PreparedStatement itemStmt = conn.prepareStatement(insertItemSql);
+                     PreparedStatement movementStmt = conn.prepareStatement(insertMovementSql);
+                     PreparedStatement ensureInventoryStmt = conn.prepareStatement(ensureInventorySql);
+                     PreparedStatement updateInventoryStmt = conn.prepareStatement(updateInventorySql)) {
+
                     for (int i = 0; i < cartModel.getRowCount(); i++) {
                         int productId = Integer.parseInt(cartModel.getValueAt(i, 0).toString());
                         int qty = Integer.parseInt(cartModel.getValueAt(i, 4).toString());
@@ -297,14 +396,34 @@ public class MakeASale extends JFrame {
                         itemStmt.setInt(3, qty);
                         itemStmt.setBigDecimal(4, BigDecimal.valueOf(price));
                         itemStmt.addBatch();
+
+                        ensureInventoryStmt.setInt(1, productId);
+                        ensureInventoryStmt.setInt(2, locationId);
+                        ensureInventoryStmt.addBatch();
+
+                        movementStmt.setInt(1, productId);
+                        movementStmt.setInt(2, locationId);
+                        movementStmt.setInt(3, -qty);
+                        movementStmt.setString(4, "SALE");
+                        movementStmt.setString(5, "sale_id=" + saleId);
+                        movementStmt.addBatch();
+
+                        updateInventoryStmt.setInt(1, qty);
+                        updateInventoryStmt.setInt(2, productId);
+                        updateInventoryStmt.setInt(3, locationId);
+                        updateInventoryStmt.addBatch();
                     }
 
                     itemStmt.executeBatch();
+                    ensureInventoryStmt.executeBatch();
+                    movementStmt.executeBatch();
+                    updateInventoryStmt.executeBatch();
                 }
 
                 conn.commit();
                 JOptionPane.showMessageDialog(this, "Sale completed successfully. Sale ID: " + saleId);
                 cartModel.setRowCount(0);
+                searchField.setText("");
                 updateOverallTotal();
 
             } catch (Exception ex) {
