@@ -23,7 +23,11 @@ public class WelcomeFrame extends JFrame {
         continueBtn.setEnabled(false);
 
         testBtn.addActionListener(e -> testConnection());
-        continueBtn.addActionListener(e -> new Login().setVisible(true));
+        continueBtn.addActionListener(e -> {
+            new Login().setVisible(true);
+            dispose();
+
+        });
 
         JPanel top = new JPanel();
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
