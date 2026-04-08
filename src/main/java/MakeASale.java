@@ -91,17 +91,21 @@ public class MakeASale extends JFrame {
        //Action Listeners
        newItemBtn.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
-              new NewItem().setVisible(true);
+               if (Login.currentLocationId == null) {
+                   JOptionPane.showMessageDialog(MakeASale.this, "No store is selected for this session.");
+                   return;
+               }
+               new NewItem(Login.currentLocationId).setVisible(true);
            }
        });
        searchBtn.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
-               Search();
+               searchProducts();
            }
        });
        searchField.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
-               Search();
+               searchProducts();
            }
        });
        cartModel.addTableModelListener(e -> {
@@ -122,7 +126,7 @@ public class MakeASale extends JFrame {
    }
 
 
-    private void Search() {
+    private void searchProducts() {
         String searchText = searchField.getText().trim();
 
         if (Login.currentLocationId == null) {
@@ -142,7 +146,7 @@ public class MakeASale extends JFrame {
             LEFT JOIN inventory i
                 ON p.product_id = i.product_id
                AND i.location_id = ?
-            WHERE p.name LIKE ? OR p.sku LIKE ?
+            WHERE p.name ILIKE ? OR p.sku ILIKE ?
             ORDER BY p.name
             """;
 
@@ -200,7 +204,6 @@ public class MakeASale extends JFrame {
                 String name = (String) table.getValueAt(selectedRow, 1);
                 String sku = (String) table.getValueAt(selectedRow, 2);
                 double price = (double) table.getValueAt(selectedRow, 3);
-                int stock = (int) table.getValueAt(selectedRow, 4);
 
                 String qtyText = JOptionPane.showInputDialog(this, "Enter quantity:", "1");
 
@@ -344,7 +347,7 @@ public class MakeASale extends JFrame {
 
                 String insertItemSql = "INSERT INTO sale_items (sale_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)";
                 String insertMovementSql = "INSERT INTO inventory_movements (product_id, location_id, change_qty, reason, note) VALUES (?, ?, ?, ?, ?)";
-                String ensureInventorySql = "INSERT INTO inventory (product_id, location_id, quantity_on_hand, reorder_level) VALUES (?, ?, 0, 0) ON DUPLICATE KEY UPDATE inventory_id = inventory_id";
+                String ensureInventorySql = "INSERT INTO inventory (product_id, location_id, quantity_on_hand, reorder_level) VALUES (?, ?, 0, 0) ON CONFLICT (product_id, location_id) DO NOTHING";
                 String updateInventorySql = "UPDATE inventory SET quantity_on_hand = quantity_on_hand - ? WHERE product_id = ? AND location_id = ?";
 
                 try (PreparedStatement itemStmt = conn.prepareStatement(insertItemSql);
@@ -382,8 +385,8 @@ public class MakeASale extends JFrame {
 
                     itemStmt.executeBatch();
                     ensureInventoryStmt.executeBatch();
-                    movementStmt.executeBatch();
                     updateInventoryStmt.executeBatch();
+                    movementStmt.executeBatch();
                 }
 
                 conn.commit();

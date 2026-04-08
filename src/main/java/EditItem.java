@@ -136,9 +136,15 @@ public class EditItem extends JFrame {
         }
 
         String sql = """
-                SELECT p.product_id, p.name, p.sku, p.price, p.category_id
+                SELECT p.product_id,
+                       p.name,
+                       p.sku,
+                       p.price,
+                       p.category_id,
+                       c.name AS category_name
                 FROM products p
-                WHERE p.name LIKE ? OR p.sku LIKE ?
+                LEFT JOIN categories c ON p.category_id = c.category_id
+                WHERE p.name ILIKE ? OR p.sku ILIKE ?
                 ORDER BY p.name
                 """;
 
@@ -157,7 +163,8 @@ public class EditItem extends JFrame {
                         rs.getString("name"),
                         rs.getString("sku"),
                         rs.getDouble("price"),
-                        rs.getObject("category_id") != null ? rs.getInt("category_id") : ""
+                        rs.getObject("category_id") != null ? rs.getInt("category_id") : "",
+                        rs.getString("category_name") != null ? rs.getString("category_name") : ""
                 });
             }
 
@@ -166,7 +173,7 @@ public class EditItem extends JFrame {
                 return;
             }
 
-            String[] columns = {"ID", "Name", "SKU", "Price", "Category ID"};
+            String[] columns = {"ID", "Name", "SKU", "Price", "Category ID", "Category"};
             DefaultTableModel model = new DefaultTableModel(rows.toArray(new Object[0][]), columns) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
@@ -200,16 +207,19 @@ public class EditItem extends JFrame {
                 String sku = (String) table.getValueAt(selectedRow, 2);
                 double price = (double) table.getValueAt(selectedRow, 3);
                 Object categoryId = table.getValueAt(selectedRow, 4);
+                Object categoryName = table.getValueAt(selectedRow, 5);
 
                 nameField.setText(name);
                 skuField.setText(sku);
                 priceField.setText(String.valueOf(price));
                 categoryIdField.setText(categoryId != null ? categoryId.toString() : "");
+                categoryIdField.setToolTipText(categoryName != null && !categoryName.toString().isBlank() ? "Category: " + categoryName : null);
 
                 setFormEnabled(true);
             }
 
         } catch (SQLException ex) {
+            ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage());
         }
     }
@@ -247,6 +257,23 @@ public class EditItem extends JFrame {
                 return;
             }
         }
+        if (categoryId != null) {
+            String validateCategorySql = "SELECT 1 FROM categories WHERE category_id = ?";
+            try (Connection conn = DB.getConnection();
+                 PreparedStatement validatePs = conn.prepareStatement(validateCategorySql)) {
+                validatePs.setInt(1, categoryId);
+                try (ResultSet rs = validatePs.executeQuery()) {
+                    if (!rs.next()) {
+                        JOptionPane.showMessageDialog(this, "Category ID " + categoryId + " does not exist.");
+                        return;
+                    }
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Failed to validate category: " + ex.getMessage());
+                return;
+            }
+        }
 
         String sql = "UPDATE products SET name = ?, sku = ?, price = ?, category_id = ? WHERE product_id = ?";
 
@@ -275,6 +302,7 @@ public class EditItem extends JFrame {
             }
 
         } catch (SQLException ex) {
+            ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Failed to update item: " + ex.getMessage());
         }
     }
@@ -285,6 +313,7 @@ public class EditItem extends JFrame {
         skuField.setText("");
         priceField.setText("");
         categoryIdField.setText("");
+        categoryIdField.setToolTipText(null);
         searchField.setText("");
         setFormEnabled(false);
         searchField.requestFocusInWindow();

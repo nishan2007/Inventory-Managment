@@ -4,7 +4,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class NewItem extends JFrame {
@@ -17,8 +16,14 @@ public class NewItem extends JFrame {
     private JButton saveButton;
     private JButton clearButton;
     private JButton cancelButton;
+    private final int selectedLocationId;
 
     public NewItem() {
+        this(1);
+    }
+
+    public NewItem(int selectedLocationId) {
+        this.selectedLocationId = selectedLocationId;
         setTitle("Add New Item");
         setSize(450, 360);
         setLocationRelativeTo(null);
@@ -134,15 +139,13 @@ public class NewItem extends JFrame {
             sql = "INSERT INTO products (name, sku, price, category_id) VALUES (?, ?, ?, ?)";
         }
 
-        String inventorySql = "INSERT INTO inventory (product_id, location_id, quantity_on_hand, reorder_level) VALUES (?, ?, ?, 0)";
-        String locationsSql = "SELECT location_id FROM locations";
+        String updateInventorySql = "UPDATE inventory SET quantity_on_hand = ? WHERE product_id = ? AND location_id = ?";
 
         try (Connection conn = DB.getConnection()) {
             conn.setAutoCommit(false);
 
             try (PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
-                 PreparedStatement inventoryPs = conn.prepareStatement(inventorySql);
-                 PreparedStatement locationsPs = conn.prepareStatement(locationsSql)) {
+                 PreparedStatement inventoryPs = conn.prepareStatement(updateInventorySql)) {
 
                 ps.setString(1, name);
                 ps.setString(2, sku);
@@ -162,19 +165,13 @@ public class NewItem extends JFrame {
                     productId = rs.getInt(1);
                 }
 
-                try (ResultSet locationsRs = locationsPs.executeQuery()) {
-                    while (locationsRs.next()) {
-                        int locationId = locationsRs.getInt("location_id");
-                        int startingQuantity = (locationId == 1) ? quantity : 0;
-
-                        inventoryPs.setInt(1, productId);
-                        inventoryPs.setInt(2, locationId);
-                        inventoryPs.setInt(3, startingQuantity);
-                        inventoryPs.addBatch();
-                    }
+                inventoryPs.setInt(1, quantity);
+                inventoryPs.setInt(2, productId);
+                inventoryPs.setInt(3, selectedLocationId);
+                inventoryPs.executeUpdate();
+                if (inventoryPs.getUpdateCount() == 0) {
+                    throw new SQLException("No inventory row found for product " + productId + " at location " + selectedLocationId + ".");
                 }
-
-                inventoryPs.executeBatch();
 
                 conn.commit();
                 JOptionPane.showMessageDialog(this, "Item added successfully.");
