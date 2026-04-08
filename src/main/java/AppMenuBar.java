@@ -12,6 +12,7 @@ public class AppMenuBar {
         JMenuItem makeSaleItem = new JMenuItem("Make a Sale");
         JMenuItem newItemItem = new JMenuItem("New Item");
         JMenuItem editItemItem = new JMenuItem("Edit Item");
+        JMenuItem employeeMgmtItem = new JMenuItem("Employee Management");
 
         if ("MakeASale".equals(currentScreen)) {
             makeSaleItem.setEnabled(false);
@@ -20,7 +21,10 @@ public class AppMenuBar {
             newItemItem.setEnabled(false);
         }
         if ("EditItem".equals(currentScreen)) {
-            newItemItem.setEnabled(false);
+            editItemItem.setEnabled(false);
+        }
+        if ("EmployeeManagement".equals(currentScreen)) {
+            employeeMgmtItem.setEnabled(false);
         }
 
         makeSaleItem.addActionListener(new ActionListener() {
@@ -44,9 +48,18 @@ public class AppMenuBar {
             }
         });
 
+        employeeMgmtItem.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                EmployeeManagement screen = new EmployeeManagement();
+                screen.setLocationRelativeTo(parent); // open centered on top
+                screen.setVisible(true);
+            }
+        });
+
         navigateMenu.add(makeSaleItem);
         navigateMenu.add(newItemItem);
         navigateMenu.add(editItemItem);
+        navigateMenu.add(employeeMgmtItem);
 
         JMenu sessionMenu = new JMenu("Session");
         JMenuItem closeItem = new JMenuItem("Close");
