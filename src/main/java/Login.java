@@ -82,7 +82,15 @@ public class Login extends JFrame {
             return;
         }
 
-        String userSql = "SELECT user_id, username, role FROM users WHERE username = ? AND password = ? AND is_active = TRUE";
+        String userSql = """
+                SELECT u.user_id,
+                       u.username,
+                       COALESCE(r.role_name, 'USER') AS role
+                FROM users u
+                LEFT JOIN roles r ON u.role_id = r.role_id
+                WHERE u.username = ?
+                  AND u.password_hash = ?
+                """;
         String storesSql = """
                 SELECT l.location_id, l.name
                 FROM user_locations ul
@@ -166,6 +174,7 @@ public class Login extends JFrame {
             }
 
         } catch (SQLException ex) {
+            ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Login failed: " + ex.getMessage());
         }
     }

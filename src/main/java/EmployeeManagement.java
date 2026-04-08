@@ -58,6 +58,7 @@ public class EmployeeManagement extends JFrame {
         fullNameField = new JTextField();
         roleBox = new JComboBox<>(new String[]{"ADMIN", "MANAGER", "CASHIER"});
         activeCheckBox = new JCheckBox("Active", true);
+        activeCheckBox.setEnabled(false);
 
         formPanel.add(new JLabel("Username:"));
         formPanel.add(usernameField);
@@ -146,7 +147,16 @@ public class EmployeeManagement extends JFrame {
     private void loadEmployees() {
         employeeModel.setRowCount(0);
 
-        String sql = "SELECT user_id, username, full_name, role, is_active FROM users ORDER BY user_id";
+        String sql = """
+                SELECT u.user_id,
+                       u.username,
+                       u.full_name,
+                       COALESCE(r.role_name, 'USER') AS role,
+                       TRUE AS is_active
+                FROM users u
+                LEFT JOIN roles r ON u.role_id = r.role_id
+                ORDER BY u.user_id
+                """;
 
         try (Connection conn = DB.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -177,7 +187,7 @@ public class EmployeeManagement extends JFrame {
         usernameField.setText(employeeModel.getValueAt(selectedRow, 1).toString());
         fullNameField.setText(employeeModel.getValueAt(selectedRow, 2) == null ? "" : employeeModel.getValueAt(selectedRow, 2).toString());
         roleBox.setSelectedItem(employeeModel.getValueAt(selectedRow, 3).toString());
-        activeCheckBox.setSelected(Boolean.parseBoolean(employeeModel.getValueAt(selectedRow, 4).toString()));
+        activeCheckBox.setSelected(true);
         passwordField.setText("");
         assignStoresButton.setEnabled(true);
     }
@@ -194,7 +204,10 @@ public class EmployeeManagement extends JFrame {
             return;
         }
 
-        String sql = "INSERT INTO users (username, password, full_name, role, is_active) VALUES (?, ?, ?, ?, ?)";
+        String sql = """
+                INSERT INTO users (username, password_hash, full_name, role_id)
+                VALUES (?, ?, ?, (SELECT role_id FROM roles WHERE role_name = ?))
+                """;
 
         try (Connection conn = DB.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -203,7 +216,6 @@ public class EmployeeManagement extends JFrame {
             ps.setString(2, password);
             ps.setString(3, fullName.isEmpty() ? null : fullName);
             ps.setString(4, role);
-            ps.setBoolean(5, isActive);
             ps.executeUpdate();
 
             JOptionPane.showMessageDialog(this, "Employee added successfully.");
@@ -236,9 +248,22 @@ public class EmployeeManagement extends JFrame {
         boolean updatePassword = !password.isEmpty();
 
         if (updatePassword) {
-            sql = "UPDATE users SET username = ?, password = ?, full_name = ?, role = ?, is_active = ? WHERE user_id = ?";
+            sql = """
+                    UPDATE users
+                    SET username = ?,
+                        password_hash = ?,
+                        full_name = ?,
+                        role_id = (SELECT role_id FROM roles WHERE role_name = ?)
+                    WHERE user_id = ?
+                    """;
         } else {
-            sql = "UPDATE users SET username = ?, full_name = ?, role = ?, is_active = ? WHERE user_id = ?";
+            sql = """
+                    UPDATE users
+                    SET username = ?,
+                        full_name = ?,
+                        role_id = (SELECT role_id FROM roles WHERE role_name = ?)
+                    WHERE user_id = ?
+                    """;
         }
 
         try (Connection conn = DB.getConnection();
@@ -250,13 +275,11 @@ public class EmployeeManagement extends JFrame {
                 ps.setString(2, password);
                 ps.setString(3, fullName.isEmpty() ? null : fullName);
                 ps.setString(4, role);
-                ps.setBoolean(5, isActive);
-                ps.setInt(6, selectedUserId);
+                ps.setInt(5, selectedUserId);
             } else {
                 ps.setString(2, fullName.isEmpty() ? null : fullName);
                 ps.setString(3, role);
-                ps.setBoolean(4, isActive);
-                ps.setInt(5, selectedUserId);
+                ps.setInt(4, selectedUserId);
             }
 
             ps.executeUpdate();
@@ -346,7 +369,7 @@ public class EmployeeManagement extends JFrame {
                         ON l.location_id = ul.location_id AND ul.user_id = ?
                     WHERE l.name LIKE ?
                        OR COALESCE(l.address, '') LIKE ?
-                       OR CAST(l.location_id AS CHAR) LIKE ?
+                       OR CAST(l.location_id AS TEXT) LIKE ?
                     ORDER BY l.location_id
                     """;
 
