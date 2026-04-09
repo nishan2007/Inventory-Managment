@@ -36,15 +36,17 @@ public class AppMenuBar {
 
         newItemItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                new NewItem().setVisible(true);
-                parent.dispose();
+                NewItem screen = new NewItem();
+                screen.setLocationRelativeTo(parent);
+                screen.setVisible(true);
             }
         });
 
         editItemItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                new EditItem().setVisible(true);
-                parent.dispose();
+                EditItem screen = new EditItem();
+                screen.setLocationRelativeTo(parent);
+                screen.setVisible(true);
             }
         });
 
@@ -63,6 +65,7 @@ public class AppMenuBar {
 
         JMenu sessionMenu = new JMenu("Session");
         JMenuItem closeItem = new JMenuItem("Close");
+        JMenuItem logoutItem = new JMenuItem("Logout");
 
         closeItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -70,7 +73,19 @@ public class AppMenuBar {
             }
         });
 
+        logoutItem.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                Login login = new Login();
+                login.setLocationRelativeTo(parent);
+                parent.dispose();
+                login.setVisible(true);
+            }
+        });
+
+
+
         sessionMenu.add(closeItem);
+        sessionMenu.add(logoutItem);
 
         menuBar.add(navigateMenu);
         menuBar.add(sessionMenu);
