@@ -4,7 +4,13 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.sql.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumnModel;
 import java.math.BigDecimal;
+import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 
 public class MakeASale extends JFrame {
     private JTextField searchField;
@@ -16,9 +22,15 @@ public class MakeASale extends JFrame {
     private JComboBox<String> paymentMethodBox;
     private JButton checkoutBtn;
     private JLabel selectedStoreLabel;
+    private JLabel currentUserLabel;
+    private JButton editItemBtn;
     private JButton newItemBtn;
+    private JLabel currentDateLabel;
+    private JLabel currentTimeLabel;
+    private String lastShownDate;
 
    public MakeASale() {
+
        //Window Setup
        setTitle("Make a Sale");
       // setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -35,16 +47,58 @@ public class MakeASale extends JFrame {
        // Search area
        JPanel searchPanel = new JPanel(new BorderLayout(10, 10));
 
+       JLabel logoLabel = new JLabel();
+       logoLabel.setHorizontalAlignment(SwingConstants.CENTER);
+       ImageIcon centerLogoIcon = loadCenterLogoIcon();
+       if (centerLogoIcon != null) {
+           Image scaledImage = centerLogoIcon.getImage().getScaledInstance(180, 80, Image.SCALE_SMOOTH);
+           logoLabel.setIcon(new ImageIcon(scaledImage));
+       } else {
+           logoLabel.setText("SmartStock");
+       }
+
        newItemBtn = new JButton("New Item");
        JLabel searchLabel = new JLabel("Search Product");
        searchField = new JTextField();
        searchBtn = new JButton("Search");
        selectedStoreLabel = new JLabel("Store: Not selected");
+       currentUserLabel = new JLabel("No User currently loged in");
+       editItemBtn = new JButton("Edit Item");
+       currentDateLabel = new JLabel("No date yet");
+       currentTimeLabel = new JLabel("no time yet");
 
-        // Top row (store + new item)
-       JPanel topRow = new JPanel(new BorderLayout(10, 10));
-       topRow.add(selectedStoreLabel, BorderLayout.WEST);
-       topRow.add(newItemBtn, BorderLayout.EAST);
+       JPanel rightSidePanel = new JPanel();
+       rightSidePanel.setLayout(new BoxLayout(rightSidePanel, BoxLayout.Y_AXIS));
+       selectedStoreLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+       currentUserLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+       currentDateLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+       currentTimeLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+       updateCurrentDateLabel();
+       updateCurrentTimeLabel();
+       startDateRefreshTimer();
+
+       rightSidePanel.add(currentDateLabel);
+       rightSidePanel.add(Box.createVerticalStrut(5));
+       rightSidePanel.add(currentTimeLabel);
+       rightSidePanel.add(Box.createVerticalStrut(10));
+       rightSidePanel.add(selectedStoreLabel);
+       rightSidePanel.add(Box.createVerticalStrut(10));
+       rightSidePanel.add(currentUserLabel);
+
+
+       JPanel leftSidePanel = new JPanel();
+       leftSidePanel.setLayout(new BoxLayout(leftSidePanel, BoxLayout.Y_AXIS));
+       newItemBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+       editItemBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+       leftSidePanel.add(newItemBtn);
+       leftSidePanel.add(Box.createVerticalStrut(30));
+       leftSidePanel.add(editItemBtn);
+
+       JPanel centerSection = new JPanel(new BorderLayout(20, 10));
+       centerSection.add(leftSidePanel, BorderLayout.WEST);
+       centerSection.add(logoLabel, BorderLayout.CENTER);
+       centerSection.add(rightSidePanel, BorderLayout.EAST);
 
         // Search row (THIS is the important part)
        JPanel searchRow = new JPanel(new BorderLayout(10, 10));
@@ -52,22 +106,25 @@ public class MakeASale extends JFrame {
        searchRow.add(searchField, BorderLayout.CENTER); // EXPANDS
        searchRow.add(searchBtn, BorderLayout.EAST);
 
-       searchPanel.add(topRow, BorderLayout.NORTH);
+       searchPanel.add(centerSection, BorderLayout.CENTER);
        searchPanel.add(searchRow, BorderLayout.SOUTH);
 
        // Cart table
        cartModel = new DefaultTableModel(
-               new Object[]{"ID", "Name", "SKU", "Price", "Qty", "Line Total"},
+               new Object[]{"ID", "Name", "Description", "SKU", "Price", "Qty", "Line Total"},
                0
        ) {
            @Override
            public boolean isCellEditable(int row, int column) {
-               return column == 3 || column == 4; // Price and Qty editable
+               return column == 4 || column == 5; // Price and Qty editable
            }
        };
        cartTable = new JTable(cartModel);
+       cartTable.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
        JScrollPane cartScrollPane = new JScrollPane(cartTable);
        cartTable.getColumnModel().getColumn(4).setCellEditor(new DefaultCellEditor(new JTextField()));
+       cartTable.getColumnModel().getColumn(5).setCellEditor(new DefaultCellEditor(new JTextField()));
+       configureCartTableColumns();
 
        panel.add(searchPanel, BorderLayout.NORTH);
        panel.add(cartScrollPane, BorderLayout.CENTER);
@@ -87,15 +144,37 @@ public class MakeASale extends JFrame {
 
        //Add panel to frame
        add(panel);
+       refreshPermissionButtons();
 
        //Action Listeners
        newItemBtn.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
+               if (!PermissionManager.requirePermission("NEW_ITEM", MakeASale.this, "New Item")) {
+                   refreshPermissionButtons();
+                   return;
+               }
                if (Login.currentLocationId == null) {
                    JOptionPane.showMessageDialog(MakeASale.this, "No store is selected for this session.");
                    return;
                }
+               if (WindowHelper.focusIfAlreadyOpen(NewItem.class)) {
+                   return;
+               }
                new NewItem(Login.currentLocationId).setVisible(true);
+           }
+       });
+       editItemBtn.addActionListener(new ActionListener() {
+           public void actionPerformed(ActionEvent e) {
+               if (!PermissionManager.requirePermission("EDIT_ITEM", MakeASale.this, "Edit Item")) {
+                   refreshPermissionButtons();
+                   return;
+               }
+               if (WindowHelper.focusIfAlreadyOpen(EditItem.class)) {
+                   return;
+               }
+               EditItem screen = new EditItem();
+               screen.setLocationRelativeTo(MakeASale.this);
+               screen.setVisible(true);
            }
        });
        searchBtn.addActionListener(new ActionListener() {
@@ -112,7 +191,7 @@ public class MakeASale extends JFrame {
            if (updatingCart) {
                return;
            }
-           if (e.getColumn() == 3 || e.getColumn() == 4 || e.getColumn() == javax.swing.event.TableModelEvent.ALL_COLUMNS) {
+           if (e.getColumn() == 4 || e.getColumn() == 5 || e.getColumn() == javax.swing.event.TableModelEvent.ALL_COLUMNS) {
                updateLineTotals();
            }
        });
@@ -121,10 +200,176 @@ public class MakeASale extends JFrame {
                checkout();
            }
        });
-       updateSelectedStoreLabel();
+       addWindowFocusListener(new java.awt.event.WindowAdapter() {
+           @Override
+           public void windowGainedFocus(java.awt.event.WindowEvent e) {
+               refreshPermissionButtons();
+           }
+       });
+       updateSelectedStoreLabel(); //displays the current store
+       updateCurrentUserLabel(); //displays the current user
        setVisible(true); //runs last for the main UI to show
    }
 
+
+    private ImageIcon loadCenterLogoIcon() {
+        String[] resourcePaths = {
+                "/Images/CenterLogo.png",
+                "Images/CenterLogo.png",
+                "/CenterLogo.png",
+                "CenterLogo.png"
+        };
+
+        for (String path : resourcePaths) {
+            URL url = getClass().getResource(path);
+            if (url != null) {
+                return new ImageIcon(url);
+            }
+        }
+
+        String[] filePaths = {
+                "src/main/Images/CenterLogo.png",
+                "src/main/resources/Images/CenterLogo.png",
+                "src/Images/CenterLogo.png",
+                "Images/CenterLogo.png",
+                "CenterLogo.png"
+        };
+
+        for (String path : filePaths) {
+            ImageIcon icon = new ImageIcon(path);
+            if (icon.getIconWidth() > 0) {
+                return icon;
+            }
+        }
+
+        System.out.println("Center logo not found. Checked classpath and common file locations.");
+        return null;
+    }
+
+    private void refreshPermissionButtons() {
+        if (newItemBtn != null) {
+            newItemBtn.setEnabled(PermissionManager.hasPermission("NEW_ITEM"));
+        }
+        if (editItemBtn != null) {
+            editItemBtn.setEnabled(PermissionManager.hasPermission("EDIT_ITEM"));
+        }
+    }
+
+    private void configureCartTableColumns() {
+        if (cartTable == null || cartTable.getColumnModel().getColumnCount() < 7) {
+            return;
+        }
+
+        TableColumnModel columnModel = cartTable.getColumnModel();
+
+        int idWidth = fitColumnWidth(cartTable, 0, 45);
+        int nameWidth = fitColumnWidth(cartTable, 1, 120);
+        int skuWidth = fitColumnWidth(cartTable, 3, 100);
+        int priceWidth = fitColumnWidth(cartTable, 4, 75);
+        int qtyWidth = fitColumnWidth(cartTable, 5, 55);
+        int lineTotalWidth = fitColumnWidth(cartTable, 6, 95);
+
+        columnModel.getColumn(0).setMinWidth(40);
+        columnModel.getColumn(0).setMaxWidth(70);
+        columnModel.getColumn(0).setPreferredWidth(idWidth);
+
+        columnModel.getColumn(1).setMinWidth(90);
+        columnModel.getColumn(1).setMaxWidth(200);
+        columnModel.getColumn(1).setPreferredWidth(nameWidth);
+
+        columnModel.getColumn(2).setMinWidth(220);
+        columnModel.getColumn(2).setPreferredWidth(320);
+        columnModel.getColumn(2).setCellRenderer(new MultiLineTableCellRenderer());
+
+        columnModel.getColumn(3).setMinWidth(90);
+        columnModel.getColumn(3).setPreferredWidth(skuWidth);
+
+        columnModel.getColumn(4).setMinWidth(70);
+        columnModel.getColumn(4).setMaxWidth(95);
+        columnModel.getColumn(4).setPreferredWidth(priceWidth);
+
+        columnModel.getColumn(5).setMinWidth(50);
+        columnModel.getColumn(5).setMaxWidth(70);
+        columnModel.getColumn(5).setPreferredWidth(qtyWidth);
+
+        columnModel.getColumn(6).setMinWidth(90);
+        columnModel.getColumn(6).setMaxWidth(120);
+        columnModel.getColumn(6).setPreferredWidth(lineTotalWidth);
+
+        updateDescriptionRowHeights();
+    }
+
+    private int fitColumnWidth(JTable table, int columnIndex, int minWidth) {
+        int width = minWidth;
+        TableColumnModel columnModel = table.getColumnModel();
+
+        TableCellRenderer headerRenderer = table.getTableHeader().getDefaultRenderer();
+        Component headerComponent = headerRenderer.getTableCellRendererComponent(
+                table,
+                columnModel.getColumn(columnIndex).getHeaderValue(),
+                false,
+                false,
+                0,
+                columnIndex
+        );
+        width = Math.max(width, headerComponent.getPreferredSize().width + 16);
+
+        for (int row = 0; row < table.getRowCount(); row++) {
+            TableCellRenderer renderer = table.getCellRenderer(row, columnIndex);
+            Component component = table.prepareRenderer(renderer, row, columnIndex);
+            width = Math.max(width, component.getPreferredSize().width + 16);
+        }
+
+        return width;
+    }
+
+    private void updateDescriptionRowHeights() {
+        if (cartTable == null || cartTable.getRowCount() == 0) {
+            return;
+        }
+
+        for (int row = 0; row < cartTable.getRowCount(); row++) {
+            int rowHeight = 24;
+            Object value = cartTable.getValueAt(row, 2);
+            String text = value == null ? "" : value.toString();
+
+            TableCellRenderer renderer = cartTable.getCellRenderer(row, 2);
+            Component component = renderer.getTableCellRendererComponent(cartTable, text, false, false, row, 2);
+
+            if (component instanceof JTextArea textArea) {
+                int columnWidth = cartTable.getColumnModel().getColumn(2).getWidth();
+                textArea.setSize(columnWidth, Short.MAX_VALUE);
+                rowHeight = Math.max(rowHeight, textArea.getPreferredSize().height + 4);
+            }
+
+            cartTable.setRowHeight(row, rowHeight);
+        }
+    }
+
+    private static class MultiLineTableCellRenderer extends JTextArea implements TableCellRenderer {
+        public MultiLineTableCellRenderer() {
+            setLineWrap(true);
+            setWrapStyleWord(true);
+            setOpaque(true);
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            setText(value == null ? "" : value.toString());
+            setFont(table.getFont());
+
+            if (isSelected) {
+                setForeground(table.getSelectionForeground());
+                setBackground(table.getSelectionBackground());
+            } else {
+                setForeground(table.getForeground());
+                setBackground(table.getBackground());
+            }
+
+            setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+            return this;
+        }
+    }
 
     private void searchProducts() {
         String searchText = searchField.getText().trim();
@@ -140,7 +385,7 @@ public class MakeASale extends JFrame {
         }
 
         String sql = """
-            SELECT p.product_id, p.name, p.sku, p.price,
+            SELECT p.product_id, p.name, p.description, p.sku, p.price,
                    COALESCE(i.quantity_on_hand, 0) AS quantity_on_hand
             FROM products p
             LEFT JOIN inventory i
@@ -165,6 +410,7 @@ public class MakeASale extends JFrame {
                 rows.add(new Object[]{
                         rs.getInt("product_id"),
                         rs.getString("name"),
+                        rs.getString("description"),
                         rs.getString("sku"),
                         rs.getDouble("price"),
                         rs.getInt("quantity_on_hand")
@@ -176,7 +422,7 @@ public class MakeASale extends JFrame {
                 return;
             }
 
-            String[] columns = {"ID", "Name", "SKU", "Price", "Stock"};
+            String[] columns = {"ID", "Name", "Description", "SKU", "Price", "Stock"};
             Object[][] data = rows.toArray(new Object[0][]);
 
             JTable table = new JTable(data, columns);
@@ -202,8 +448,9 @@ public class MakeASale extends JFrame {
 
                 int productId = (int) table.getValueAt(selectedRow, 0);
                 String name = (String) table.getValueAt(selectedRow, 1);
-                String sku = (String) table.getValueAt(selectedRow, 2);
-                double price = (double) table.getValueAt(selectedRow, 3);
+                String description = (String) table.getValueAt(selectedRow, 2);
+                String sku = (String) table.getValueAt(selectedRow, 3);
+                double price = (double) table.getValueAt(selectedRow, 4);
 
                 String qtyText = JOptionPane.showInputDialog(this, "Enter quantity:", "1");
 
@@ -219,41 +466,41 @@ public class MakeASale extends JFrame {
                     return;
                 }
 
-
-
-                addToCart(productId, name, sku, price, qty);
+                addToCart(productId, name, description, sku, price, qty);
             }
 
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
         }
     }
-    private void addToCart(int productId, String name, String sku, double price, int qty) {
+    private void addToCart(int productId, String name, String description, String sku, double price, int qty) {
         for (int i = 0; i < cartModel.getRowCount(); i++) {
-            int existingProductId = (int) cartModel.getValueAt(i, 0);
+            int existingProductId = Integer.parseInt(cartModel.getValueAt(i, 0).toString());
 
             if (existingProductId == productId) {
-                int existingQty = Integer.parseInt(cartModel.getValueAt(i, 4).toString());
+                int existingQty = Integer.parseInt(cartModel.getValueAt(i, 5).toString());
                 int newQty = existingQty + qty;
                 double newLineTotal = price * newQty;
 
-                cartModel.setValueAt(newQty, i, 4);
-                cartModel.setValueAt(newLineTotal, i, 5);
+                cartModel.setValueAt(newQty, i, 5);
+                cartModel.setValueAt(newLineTotal, i, 6);
                 updateOverallTotal();
+                configureCartTableColumns();
                 return;
             }
         }
 
         double lineTotal = price * qty;
-        cartModel.addRow(new Object[]{productId, name, sku, price, qty, lineTotal});
+        cartModel.addRow(new Object[]{productId, name, description, sku, price, qty, lineTotal});
         updateLineTotals();
+        configureCartTableColumns();
     }
     private void updateLineTotals() {
         updatingCart = true;
         try {
             for (int i = 0; i < cartModel.getRowCount(); i++) {
-                Object qtyValue = cartModel.getValueAt(i, 4);
-                Object priceValue = cartModel.getValueAt(i, 3);
+                Object priceValue = cartModel.getValueAt(i, 4);
+                Object qtyValue = cartModel.getValueAt(i, 5);
 
                 int qty;
                 double price;
@@ -270,11 +517,13 @@ public class MakeASale extends JFrame {
                     price = 0.0;
                 }
 
-
-                cartModel.setValueAt(qty, i, 4);
-                cartModel.setValueAt(price * qty, i, 5);
+                cartModel.setValueAt(price, i, 4);
+                cartModel.setValueAt(qty, i, 5);
+                cartModel.setValueAt(price * qty, i, 6);
             }
             updateOverallTotal();
+            updateDescriptionRowHeights();
+            configureCartTableColumns();
         } finally {
             updatingCart = false;
         }
@@ -284,7 +533,7 @@ public class MakeASale extends JFrame {
         double total = 0.0;
 
         for (int i = 0; i < cartModel.getRowCount(); i++) {
-            Object lineTotalValue = cartModel.getValueAt(i, 5);
+            Object lineTotalValue = cartModel.getValueAt(i, 6);
             try {
                 total += Double.parseDouble(lineTotalValue.toString());
             } catch (NumberFormatException ex) {
@@ -295,6 +544,48 @@ public class MakeASale extends JFrame {
         return total;
     }
 
+    private void updateCurrentDateLabel() {
+        if (currentDateLabel == null) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        lastShownDate = now.format(formatter);
+        currentDateLabel.setText("Date: " + lastShownDate);
+    }
+    private void updateCurrentTimeLabel() {
+        if (currentTimeLabel == null) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("hh:mm a");
+        currentTimeLabel.setText("Time: " + now.format(formatter));
+    }
+
+    private void startDateRefreshTimer() {
+        javax.swing.Timer dateTimer = new javax.swing.Timer(1000, e -> {
+            updateCurrentTimeLabel();
+            String today = LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+            if (!today.equals(lastShownDate)) {
+                updateCurrentDateLabel();
+            }
+        });
+        dateTimer.setInitialDelay(0);
+        dateTimer.start();
+    }
+    private void updateCurrentUserLabel() {
+       if(currentUserLabel == null){
+           return;
+       }
+       if(Login.currentUserId == null || Login.currentUsername == null){
+           currentUserLabel.setText("No User currently loged in");
+       }
+       else{
+           currentUserLabel.setText("Current Cashier: " + Login.currentUsername);
+       }
+    }
     private void updateSelectedStoreLabel() {
         if (selectedStoreLabel == null) {
             return;
@@ -357,8 +648,8 @@ public class MakeASale extends JFrame {
 
                     for (int i = 0; i < cartModel.getRowCount(); i++) {
                         int productId = Integer.parseInt(cartModel.getValueAt(i, 0).toString());
-                        int qty = Integer.parseInt(cartModel.getValueAt(i, 4).toString());
-                        double price = Double.parseDouble(cartModel.getValueAt(i, 3).toString());
+                        int qty = Integer.parseInt(cartModel.getValueAt(i, 5).toString());
+                        double price = Double.parseDouble(cartModel.getValueAt(i, 4).toString());
 
                         itemStmt.setInt(1, saleId);
                         itemStmt.setInt(2, productId);
@@ -392,6 +683,7 @@ public class MakeASale extends JFrame {
                 conn.commit();
                 JOptionPane.showMessageDialog(this, "Sale completed successfully. Sale ID: " + saleId);
                 cartModel.setRowCount(0);
+                configureCartTableColumns();
                 searchField.setText("");
                 updateOverallTotal();
 
@@ -411,7 +703,7 @@ public class MakeASale extends JFrame {
         double total = 0.0;
 
         for (int i = 0; i < cartModel.getRowCount(); i++) {
-            Object lineTotalValue = cartModel.getValueAt(i, 5);
+            Object lineTotalValue = cartModel.getValueAt(i, 6);
 
             try {
                 total += Double.parseDouble(lineTotalValue.toString());
@@ -431,3 +723,4 @@ public class MakeASale extends JFrame {
                 "Text:\n" + searchText,
                 "Search Text",
                 JOptionPane.INFORMATION_MESSAGE); */
+
