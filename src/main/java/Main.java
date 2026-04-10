@@ -7,7 +7,7 @@ public class Main {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {}
             new WelcomeFrame().setVisible(true);
-          //  new NewItem().setVisible(true);
+          // new NewItem().setVisible(true);
            // new EmployeeManagement().setVisible(true);
            // new Roles_Permission().setVisible(true);
         });
