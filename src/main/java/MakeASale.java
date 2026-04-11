@@ -1,4 +1,6 @@
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -10,6 +12,7 @@ import java.math.BigDecimal;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import javax.swing.table.JTableHeader;
 
 
 public class MakeASale extends JFrame {
@@ -28,6 +31,10 @@ public class MakeASale extends JFrame {
     private JLabel currentDateLabel;
     private JLabel currentTimeLabel;
     private String lastShownDate;
+    private JPopupMenu searchPopup;
+    private JTable searchResultsTable;
+    private JScrollPane searchResultsScrollPane;
+    private javax.swing.Timer searchDebounceTimer;
 
    public MakeASale() {
 
@@ -184,7 +191,60 @@ public class MakeASale extends JFrame {
        });
        searchField.addActionListener(new ActionListener() {
            public void actionPerformed(ActionEvent e) {
-               searchProducts();
+               addSelectedSearchResultToCart();
+           }
+       });
+       searchField.getDocument().addDocumentListener(new DocumentListener() {
+           private void restartSearchDebounce() {
+               if (searchDebounceTimer == null) {
+                   searchDebounceTimer = new javax.swing.Timer(250, e -> searchProducts(false));
+                   searchDebounceTimer.setRepeats(false);
+               }
+
+               searchDebounceTimer.restart();
+           }
+
+           @Override
+           public void insertUpdate(DocumentEvent e) {
+               SwingUtilities.invokeLater(this::restartSearchDebounce);
+           }
+
+           @Override
+           public void removeUpdate(DocumentEvent e) {
+               SwingUtilities.invokeLater(this::restartSearchDebounce);
+           }
+
+           @Override
+           public void changedUpdate(DocumentEvent e) {
+               SwingUtilities.invokeLater(this::restartSearchDebounce);
+           }
+       });
+       searchField.addKeyListener(new java.awt.event.KeyAdapter() {
+           @Override
+           public void keyPressed(java.awt.event.KeyEvent e) {
+               if (searchResultsTable == null || searchResultsTable.getRowCount() == 0) {
+                   return;
+               }
+
+               int selectedRow = searchResultsTable.getSelectedRow();
+
+               if (e.getKeyCode() == java.awt.event.KeyEvent.VK_DOWN) {
+                   int nextRow = Math.min(selectedRow + 1, searchResultsTable.getRowCount() - 1);
+                   if (nextRow >= 0) {
+                       searchResultsTable.setRowSelectionInterval(nextRow, nextRow);
+                       searchResultsTable.scrollRectToVisible(searchResultsTable.getCellRect(nextRow, 0, true));
+                   }
+                   e.consume();
+               } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_UP) {
+                   int nextRow = Math.max(selectedRow - 1, 0);
+                   if (nextRow >= 0) {
+                       searchResultsTable.setRowSelectionInterval(nextRow, nextRow);
+                       searchResultsTable.scrollRectToVisible(searchResultsTable.getCellRect(nextRow, 0, true));
+                   }
+                   e.consume();
+               } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+                   closeSearchPopup();
+               }
            }
        });
        cartModel.addTableModelListener(e -> {
@@ -372,6 +432,10 @@ public class MakeASale extends JFrame {
     }
 
     private void searchProducts() {
+        searchProducts(true);
+    }
+
+    private void searchProducts(boolean showMessages) {
         String searchText = searchField.getText().trim();
 
         if (Login.currentLocationId == null) {
@@ -380,7 +444,10 @@ public class MakeASale extends JFrame {
         }
 
         if (searchText.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Type a product name or SKU first.");
+            closeSearchPopup();
+            if (showMessages) {
+                JOptionPane.showMessageDialog(this, "Type a product name or SKU first.");
+            }
             return;
         }
 
@@ -418,59 +485,127 @@ public class MakeASale extends JFrame {
             }
 
             if (rows.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "No matching products found.");
+                closeSearchPopup();
+                if (showMessages) {
+                    JOptionPane.showMessageDialog(this, "No matching products found.");
+                }
                 return;
             }
 
-            String[] columns = {"ID", "Name", "Description", "SKU", "Price", "Stock"};
-            Object[][] data = rows.toArray(new Object[0][]);
-
-            JTable table = new JTable(data, columns);
-            table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-            JScrollPane scrollPane = new JScrollPane(table);
-            scrollPane.setPreferredSize(new Dimension(600, 250));
-
-            int result = JOptionPane.showConfirmDialog(
-                    this,
-                    scrollPane,
-                    "Select a Product",
-                    JOptionPane.OK_CANCEL_OPTION,
-                    JOptionPane.PLAIN_MESSAGE
-            );
-
-            if (result == JOptionPane.OK_OPTION) {
-                int selectedRow = table.getSelectedRow();
-
-                if (selectedRow == -1) {
-                    JOptionPane.showMessageDialog(this, "Please select a product.");
-                    return;
-                }
-
-                int productId = (int) table.getValueAt(selectedRow, 0);
-                String name = (String) table.getValueAt(selectedRow, 1);
-                String description = (String) table.getValueAt(selectedRow, 2);
-                String sku = (String) table.getValueAt(selectedRow, 3);
-                double price = (double) table.getValueAt(selectedRow, 4);
-
-                String qtyText = JOptionPane.showInputDialog(this, "Enter quantity:", "1");
-
-                if (qtyText == null) {
-                    return;
-                }
-
-                int qty;
-                try {
-                    qty = Integer.parseInt(qtyText);
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(this, "Please enter a valid number.");
-                    return;
-                }
-
-                addToCart(productId, name, description, sku, price, qty);
-            }
+            showSearchResultsPopup(rows);
 
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showSearchResultsPopup(java.util.List<Object[]> rows) {
+        if (searchPopup == null) {
+            searchPopup = new JPopupMenu();
+            searchPopup.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+            searchPopup.setFocusable(false);
+
+            String[] columns = {"ID", "Name", "Description", "SKU", "Price", "Stock"};
+            DefaultTableModel resultsModel = new DefaultTableModel(columns, 0) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;
+                }
+            };
+
+            searchResultsTable = new JTable(resultsModel);
+            searchResultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            searchResultsTable.setAutoCreateRowSorter(true);
+            searchResultsTable.setRowHeight(24);
+            JTableHeader header = searchResultsTable.getTableHeader();
+            header.setReorderingAllowed(false);
+            header.setPreferredSize(new Dimension(0, 0));
+            header.setMinimumSize(new Dimension(0, 0));
+            header.setMaximumSize(new Dimension(0, 0));
+            header.setVisible(false);
+            searchResultsTable.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 2) {
+                        addSelectedSearchResultToCart();
+                    }
+                }
+            });
+
+            searchResultsScrollPane = new JScrollPane(searchResultsTable);
+            searchResultsScrollPane.setBorder(BorderFactory.createEmptyBorder());
+            searchResultsScrollPane.setColumnHeaderView(null);
+            searchResultsScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+            searchPopup.setLayout(new BorderLayout());
+            searchPopup.add(searchResultsScrollPane, BorderLayout.CENTER);
+        }
+
+        DefaultTableModel model = (DefaultTableModel) searchResultsTable.getModel();
+        model.setRowCount(0);
+        for (Object[] row : rows) {
+            model.addRow(row);
+        }
+
+        if (searchResultsTable.getRowCount() > 0) {
+            searchResultsTable.setRowSelectionInterval(0, 0);
+        }
+
+        searchResultsScrollPane.setPreferredSize(new Dimension(Math.max(searchField.getWidth(), 500), 220));
+
+        searchResultsTable.getColumnModel().getColumn(0).setPreferredWidth(50);
+        searchResultsTable.getColumnModel().getColumn(1).setPreferredWidth(140);
+        searchResultsTable.getColumnModel().getColumn(2).setPreferredWidth(220);
+        searchResultsTable.getColumnModel().getColumn(3).setPreferredWidth(110);
+        searchResultsTable.getColumnModel().getColumn(4).setPreferredWidth(80);
+        searchResultsTable.getColumnModel().getColumn(5).setPreferredWidth(70);
+
+        if (searchPopup.isVisible()) {
+            searchPopup.setVisible(false);
+        }
+
+        searchPopup.show(searchField, 0, searchField.getHeight());
+        searchField.requestFocusInWindow();
+    }
+
+    private void addSelectedSearchResultToCart() {
+        if (searchResultsTable == null || searchResultsTable.getSelectedRow() == -1) {
+            if (searchPopup != null && searchPopup.isVisible()) {
+                JOptionPane.showMessageDialog(this, "Please select a product.");
+            }
+            return;
+        }
+
+        int selectedRow = searchResultsTable.convertRowIndexToModel(searchResultsTable.getSelectedRow());
+
+        int productId = ((Number) searchResultsTable.getModel().getValueAt(selectedRow, 0)).intValue();
+        String name = String.valueOf(searchResultsTable.getModel().getValueAt(selectedRow, 1));
+        String description = String.valueOf(searchResultsTable.getModel().getValueAt(selectedRow, 2));
+        String sku = String.valueOf(searchResultsTable.getModel().getValueAt(selectedRow, 3));
+        double price = ((Number) searchResultsTable.getModel().getValueAt(selectedRow, 4)).doubleValue();
+
+        String qtyText = JOptionPane.showInputDialog(this, "Enter quantity:", "1");
+        if (qtyText == null) {
+            return;
+        }
+
+        int qty;
+        try {
+            qty = Integer.parseInt(qtyText);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Please enter a valid number.");
+            return;
+        }
+
+        addToCart(productId, name, description, sku, price, qty);
+        closeSearchPopup();
+        searchField.requestFocusInWindow();
+        searchField.selectAll();
+    }
+
+    private void closeSearchPopup() {
+        if (searchPopup != null) {
+            searchPopup.setVisible(false);
         }
     }
     private void addToCart(int productId, String name, String description, String sku, double price, int qty) {
@@ -717,10 +852,4 @@ public class MakeASale extends JFrame {
 
 }
 
-
-
-/*        JOptionPane.showMessageDialog(this,
-                "Text:\n" + searchText,
-                "Search Text",
-                JOptionPane.INFORMATION_MESSAGE); */
 
