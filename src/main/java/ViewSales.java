@@ -12,6 +12,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.Vector;
 
 public class ViewSales extends JFrame {
@@ -181,7 +184,7 @@ public class ViewSales extends JFrame {
         salesTableModel.setRowCount(0);
 
         StringBuilder sql = new StringBuilder(
-                "SELECT s.sale_id, s.sale_time, " +
+                "SELECT s.sale_id, s.created_at, " +
                         "COALESCE(u.full_name, u.username, 'Unknown') AS cashier_name, " +
                         "COALESCE(l.name, 'Unknown') AS store_name, " +
                         "COUNT(si.sale_item_id) AS item_count, " +
@@ -220,17 +223,17 @@ public class ViewSales extends JFrame {
         }
 
         if (fromDate != null) {
-            sql.append("AND s.sale_time >= ? ");
+            sql.append("AND s.created_at >= ? ");
             parameters.add(Timestamp.valueOf(fromDate.atStartOfDay()));
         }
 
         if (toDate != null) {
-            sql.append("AND s.sale_time < ? ");
+            sql.append("AND s.created_at < ? ");
             parameters.add(Timestamp.valueOf(toDate.plusDays(1).atStartOfDay()));
         }
 
-        sql.append("GROUP BY s.sale_id, s.sale_time, cashier_name, store_name, s.payment_method, s.total_amount ")
-                .append("ORDER BY s.sale_time DESC");
+        sql.append("GROUP BY s.sale_id, s.created_at, cashier_name, store_name, s.payment_method, s.total_amount ")
+                .append("ORDER BY s.created_at DESC");
 
         double grandTotal = 0;
         int transactionCount = 0;
@@ -245,7 +248,7 @@ public class ViewSales extends JFrame {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int saleId = rs.getInt("sale_id");
-                    Timestamp saleTimestamp = rs.getTimestamp("sale_time");
+                    Timestamp saleTimestamp = rs.getTimestamp("created_at");
                     String cashier = rs.getString("cashier_name");
                     String store = rs.getString("store_name");
                     int itemCount = rs.getInt("item_count");
@@ -305,7 +308,7 @@ public class ViewSales extends JFrame {
                         "COALESCE(p.name, 'Deleted Item') AS product_name, " +
                         "COALESCE(si.quantity, 0) AS quantity, " +
                         "COALESCE(si.unit_price, 0) AS unit_price, " +
-                        "COALESCE(si.line_total, 0) AS line_total " +
+                        "COALESCE(si.quantity, 0) * COALESCE(si.unit_price, 0) AS line_total " +
                         "FROM sale_items si " +
                         "LEFT JOIN products p ON si.product_id = p.product_id " +
                         "WHERE si.sale_id = ? " +
@@ -384,15 +387,12 @@ public class ViewSales extends JFrame {
             return "";
         }
 
-        LocalDateTime dateTime = timestamp.toLocalDateTime();
-        return dbDateTimeFormatter.format(dateTime);
+        LocalDateTime utcDateTime = timestamp.toLocalDateTime();
+        ZonedDateTime localDateTime = utcDateTime.atZone(ZoneOffset.UTC).withZoneSameInstant(ZoneId.systemDefault());
+        return dbDateTimeFormatter.format(localDateTime);
     }
 
     private Connection getConnection() throws SQLException {
         return DB.getConnection();
-    }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new ViewSales().setVisible(true));
     }
 }

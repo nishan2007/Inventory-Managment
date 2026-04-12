@@ -10,6 +10,7 @@ public class Main {
           // new NewItem().setVisible(true);
            // new EmployeeManagement().setVisible(true);
            // new Roles_Permission().setVisible(true);
+            new ViewSales().setVisible(true);
         });
     }
 }

@@ -749,18 +749,24 @@ public class MakeASale extends JFrame {
                 JOptionPane.showMessageDialog(this, "No store is selected for this session.");
                 return;
             }
+            if (Login.currentUserId == null) {
+                conn.setAutoCommit(true);
+                JOptionPane.showMessageDialog(this, "No cashier is logged in for this session.");
+                return;
+            }
 
             int locationId = Login.currentLocationId;
 
             try {
-                String insertSaleSql = "INSERT INTO sales (location_id, total_amount, status, payment_method) VALUES (?, ?, ?, ?)";
+                String insertSaleSql = "INSERT INTO sales (location_id, user_id, total_amount, status, payment_method) VALUES (?, ?, ?, ?, ?)";
                 int saleId;
 
                 try (PreparedStatement saleStmt = conn.prepareStatement(insertSaleSql, Statement.RETURN_GENERATED_KEYS)) {
                     saleStmt.setInt(1, locationId);
-                    saleStmt.setBigDecimal(2, BigDecimal.valueOf(getOverallTotal()));
-                    saleStmt.setString(3, "COMPLETED");
-                    saleStmt.setString(4, paymentMethod);
+                    saleStmt.setInt(2, Login.currentUserId);
+                    saleStmt.setBigDecimal(3, BigDecimal.valueOf(getOverallTotal()));
+                    saleStmt.setString(4, "COMPLETED");
+                    saleStmt.setString(5, paymentMethod);
                     saleStmt.executeUpdate();
 
                     try (ResultSet generatedKeys = saleStmt.getGeneratedKeys()) {
