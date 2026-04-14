@@ -169,8 +169,7 @@ public class Login extends JFrame {
 
                 dispose();
                 // Open the main application
-                //Replace later with a main menu screen rn set to makeasale.
-                new MakeASale();
+                new MainMenu().setVisible(true);
             }
 
         } catch (SQLException ex) {

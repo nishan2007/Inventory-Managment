@@ -17,6 +17,7 @@ public class AppMenuBar {
         JMenu navigateMenu = new JMenu("Navigate");
         JMenu employeeMenu = new JMenu("Employee");
 
+        JMenuItem mainMenuItem = new JMenuItem("Main Menu");
         JMenuItem makeSaleItem = new JMenuItem("Make a Sale");
         JMenuItem newItemItem = new JMenuItem("New Item");
         JMenuItem editItemItem = new JMenuItem("Edit Item");
@@ -29,10 +30,24 @@ public class AppMenuBar {
         boolean canEmployeeMgmt = PermissionManager.hasPermission("EMPLOYEE_MANAGEMENT");
         boolean canRoleManagement = PermissionManager.hasPermission("ROLE_MANAGEMENT");
         boolean canChangeStore = PermissionManager.hasPermission("CHANGE_STORE");
+        boolean canOpenMainMenu = canMakeSale || canNewItem || canEditItem || canEmployeeMgmt || canRoleManagement;
 
+        if (!canOpenMainMenu || "MainMenu".equals(currentScreen)) {
+            mainMenuItem.setEnabled(false);
+        }
         if (!canMakeSale || "MakeASale".equals(currentScreen)) {
             makeSaleItem.setEnabled(false);
         }
+        mainMenuItem.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (WindowHelper.focusIfAlreadyOpen(MainMenu.class)) {
+                    parent.dispose();
+                    return;
+                }
+                new MainMenu().setVisible(true);
+                parent.dispose();
+            }
+        });
         if (!canNewItem || "NewItem".equals(currentScreen)) {
             newItemItem.setEnabled(false);
         }
@@ -116,6 +131,8 @@ public class AppMenuBar {
             }
         });
 
+        navigateMenu.add(mainMenuItem);
+        navigateMenu.addSeparator();
         navigateMenu.add(makeSaleItem);
         navigateMenu.add(newItemItem);
         navigateMenu.add(editItemItem);
@@ -236,6 +253,12 @@ public class AppMenuBar {
 
         SwingUtilities.invokeLater(() -> {
             switch (currentScreen) {
+                case "MainMenu" -> {
+                    JFrame refreshed = new MainMenu();
+                    refreshed.setLocationRelativeTo(parent);
+                    refreshed.setVisible(true);
+                    parent.dispose();
+                }
                 case "MakeASale" -> {
                     JFrame refreshed = new MakeASale();
                     refreshed.setLocationRelativeTo(parent);
