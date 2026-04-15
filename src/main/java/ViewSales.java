@@ -36,6 +36,8 @@ public class ViewSales extends JFrame {
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(12, 12));
 
+        setJMenuBar(AppMenuBar.create(this,"ViewSales"));
+
         JPanel mainPanel = new JPanel(new BorderLayout(12, 12));
         mainPanel.setBorder(new EmptyBorder(14, 14, 14, 14));
         add(mainPanel, BorderLayout.CENTER);

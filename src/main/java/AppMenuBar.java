@@ -23,14 +23,17 @@ public class AppMenuBar {
         JMenuItem editItemItem = new JMenuItem("Edit Item");
         JMenuItem employeeMgmtItem = new JMenuItem("Employee Management");
         JMenuItem rolesPermissionItem = new JMenuItem("Roles & Permission");
+        JMenuItem ViewSalesItem = new JMenuItem("View Sales");
 
         boolean canMakeSale = PermissionManager.hasPermission("MAKE_SALE");
         boolean canNewItem = PermissionManager.hasPermission("NEW_ITEM");
         boolean canEditItem = PermissionManager.hasPermission("EDIT_ITEM");
+        boolean canViewSales = PermissionManager.hasPermission("VIEW_SALES");
+
         boolean canEmployeeMgmt = PermissionManager.hasPermission("EMPLOYEE_MANAGEMENT");
         boolean canRoleManagement = PermissionManager.hasPermission("ROLE_MANAGEMENT");
         boolean canChangeStore = PermissionManager.hasPermission("CHANGE_STORE");
-        boolean canOpenMainMenu = canMakeSale || canNewItem || canEditItem || canEmployeeMgmt || canRoleManagement;
+        boolean canOpenMainMenu = canMakeSale || canNewItem || canEditItem || canViewSales || canEmployeeMgmt || canRoleManagement;
 
         if (!canOpenMainMenu || "MainMenu".equals(currentScreen)) {
             mainMenuItem.setEnabled(false);
@@ -53,6 +56,9 @@ public class AppMenuBar {
         }
         if (!canEditItem || "EditItem".equals(currentScreen)) {
             editItemItem.setEnabled(false);
+        }
+        if (!canViewSales || "ViewSales".equals(currentScreen)) {
+            ViewSalesItem.setEnabled(false);
         }
         if (!canEmployeeMgmt || "EmployeeManagement".equals(currentScreen)) {
             employeeMgmtItem.setEnabled(false);
@@ -103,6 +109,20 @@ public class AppMenuBar {
             }
         });
 
+             ViewSalesItem.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!PermissionManager.requirePermission("VIEW_SALES", parent, "View Sales")) {
+                            return;
+                        }
+                        if (WindowHelper.focusIfAlreadyOpen(ViewSales.class)) {
+                            return;
+                        }
+                        ViewSales screen = new ViewSales();
+                        screen.setLocationRelativeTo(parent);
+                        screen.setVisible(true);
+                }
+                });
+
         employeeMgmtItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 if (!PermissionManager.requirePermission("EMPLOYEE_MANAGEMENT", parent, "Employee Management")) {
@@ -136,6 +156,7 @@ public class AppMenuBar {
         navigateMenu.add(makeSaleItem);
         navigateMenu.add(newItemItem);
         navigateMenu.add(editItemItem);
+        navigateMenu.add(ViewSalesItem);
 
         employeeMenu.add(employeeMgmtItem);
         employeeMenu.add(rolesPermissionItem);
@@ -273,6 +294,12 @@ public class AppMenuBar {
                 }
                 case "EditItem" -> {
                     JFrame refreshed = new EditItem();
+                    refreshed.setLocationRelativeTo(parent);
+                    refreshed.setVisible(true);
+                    parent.dispose();
+                }
+                case "ViewSales" -> {
+                    JFrame refreshed = new ViewSales();
                     refreshed.setLocationRelativeTo(parent);
                     refreshed.setVisible(true);
                     parent.dispose();

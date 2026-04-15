@@ -53,6 +53,7 @@ public class MainMenu extends JFrame {
         editItemsButton = createMenuButton("Edit Items", "Update product information", loadIcon("src/ICONS/EditItem.png"));
         employeeManagementButton = createMenuButton("Employees", "Manage employee accounts", loadIcon("src/ICONS/Employee.png"));
         rolesPermissionsButton = createMenuButton("Roles & Permissions", "Configure user access", loadIcon("src/ICONS/Security.png"));
+        applyPermissions();
 
         gridPanel.add(makeSaleButton);
         gridPanel.add(viewSalesButton);
@@ -83,13 +84,59 @@ public class MainMenu extends JFrame {
         return new ImageIcon(img);
     }
 
+    private void applyPermissions() {
+        boolean canMakeSale = PermissionManager.hasPermission("MAKE_SALE");
+        boolean canViewSales = PermissionManager.hasPermission("MAKE_SALE");
+        boolean canAddItem = PermissionManager.hasPermission("NEW_ITEM");
+        boolean canEditItem = PermissionManager.hasPermission("EDIT_ITEM");
+        boolean canEmployeeManagement = PermissionManager.hasPermission("EMPLOYEE_MANAGEMENT");
+        boolean canRolesPermissions = PermissionManager.hasPermission("ROLE_MANAGEMENT");
+
+        makeSaleButton.setEnabled(canMakeSale);
+        viewSalesButton.setEnabled(canViewSales);
+        addItemButton.setEnabled(canAddItem);
+        editItemsButton.setEnabled(canEditItem);
+        employeeManagementButton.setEnabled(canEmployeeManagement);
+        rolesPermissionsButton.setEnabled(canRolesPermissions);
+    }
+
     private void wireActions() {
-        makeSaleButton.addActionListener(e -> openScreen(new MakeASale()));
-        viewSalesButton.addActionListener(e -> openScreen(new ViewSales()));
-        addItemButton.addActionListener(e -> openScreen(new NewItem()));
-        editItemsButton.addActionListener(e -> openScreen(new EditItem()));
-        employeeManagementButton.addActionListener(e -> openScreen(new EmployeeManagement()));
-        rolesPermissionsButton.addActionListener(e -> openScreen(new Roles_Permission()));
+        makeSaleButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("MAKE_SALE", this, "Make a Sale")) {
+                return;
+            }
+            openScreen(new MakeASale());
+        });
+        viewSalesButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("MAKE_SALE", this, "View Sales")) {
+                return;
+            }
+            openScreen(new ViewSales());
+        });
+        addItemButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("NEW_ITEM", this, "Add Item")) {
+                return;
+            }
+            openScreen(new NewItem());
+        });
+        editItemsButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("EDIT_ITEM", this, "Edit Items")) {
+                return;
+            }
+            openScreen(new EditItem());
+        });
+        employeeManagementButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("EMPLOYEE_MANAGEMENT", this, "Employee Management")) {
+                return;
+            }
+            openScreen(new EmployeeManagement());
+        });
+        rolesPermissionsButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("ROLE_MANAGEMENT", this, "Roles & Permissions")) {
+                return;
+            }
+            openScreen(new Roles_Permission());
+        });
 
         logoutButton.addActionListener(e -> {
             dispose();
