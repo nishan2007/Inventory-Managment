@@ -91,12 +91,21 @@ public class PermissionManager {
 
     public static boolean canAccessScreen(String screenName) {
         return switch (screenName) {
+            case "MainMenu" -> hasPermission("MAKE_SALE")
+                    || hasPermission("VIEW_SALES")
+                    || hasPermission("VIEW_INVENTORY")
+                    || hasPermission("NEW_ITEM")
+                    || hasPermission("EDIT_ITEM")
+                    || hasPermission("EMPLOYEE_MANAGEMENT")
+                    || hasPermission("ROLE_MANAGEMENT");
             case "MakeASale" -> hasPermission("MAKE_SALE");
+            case "ViewSales" -> hasPermission("VIEW_SALES");
+            case "ViewInventory" -> hasPermission("VIEW_INVENTORY");
             case "NewItem" -> hasPermission("NEW_ITEM");
             case "EditItem" -> hasPermission("EDIT_ITEM");
             case "EmployeeManagement" -> hasPermission("EMPLOYEE_MANAGEMENT");
             case "Roles_Permission" -> hasPermission("ROLE_MANAGEMENT");
-            default -> false;
+            default -> true;
         };
     }
     public static void refreshOpenWindows() {

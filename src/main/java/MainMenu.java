@@ -7,6 +7,7 @@ public class MainMenu extends JFrame {
 
     private final JButton makeSaleButton;
     private final JButton viewSalesButton;
+    private final JButton viewInventoryButton;
     private final JButton addItemButton;
     private final JButton editItemsButton;
     private final JButton employeeManagementButton;
@@ -44,11 +45,12 @@ public class MainMenu extends JFrame {
         headerPanel.add(Box.createVerticalStrut(8));
         headerPanel.add(subtitleLabel);
 
-        JPanel gridPanel = new JPanel(new GridLayout(2, 3, 20, 20));
+        JPanel gridPanel = new JPanel(new GridLayout(2, 4, 20, 20));
         gridPanel.setOpaque(false);
 
         makeSaleButton = createMenuButton("Make a Sale", "Create a new sale transaction", loadIcon("src/ICONS/MakeASale.png"));
         viewSalesButton = createMenuButton("View Sales", "Review previous transactions", loadIcon("src/ICONS/ViewSales.png"));
+        viewInventoryButton = createMenuButton("View Inventory", "View current inventory levels", loadIcon("src/ICONS/ViewInventory.png"));
         addItemButton = createMenuButton("Add Item", "Add a new product to inventory", loadIcon("src/ICONS/NewItem.png"));
         editItemsButton = createMenuButton("Edit Items", "Update product information", loadIcon("src/ICONS/EditItem.png"));
         employeeManagementButton = createMenuButton("Employees", "Manage employee accounts", loadIcon("src/ICONS/Employee.png"));
@@ -57,10 +59,12 @@ public class MainMenu extends JFrame {
 
         gridPanel.add(makeSaleButton);
         gridPanel.add(viewSalesButton);
+        gridPanel.add(viewInventoryButton);
         gridPanel.add(addItemButton);
         gridPanel.add(editItemsButton);
         gridPanel.add(employeeManagementButton);
         gridPanel.add(rolesPermissionsButton);
+        gridPanel.add(new JPanel());
 
         logoutButton = new JButton("Logout");
         logoutButton.setFont(new Font("SansSerif", Font.BOLD, 14));
@@ -86,7 +90,8 @@ public class MainMenu extends JFrame {
 
     private void applyPermissions() {
         boolean canMakeSale = PermissionManager.hasPermission("MAKE_SALE");
-        boolean canViewSales = PermissionManager.hasPermission("MAKE_SALE");
+        boolean canViewSales = PermissionManager.hasPermission("VIEW_SALES");
+        boolean canViewInventory = PermissionManager.hasPermission("VIEW_INVENTORY");
         boolean canAddItem = PermissionManager.hasPermission("NEW_ITEM");
         boolean canEditItem = PermissionManager.hasPermission("EDIT_ITEM");
         boolean canEmployeeManagement = PermissionManager.hasPermission("EMPLOYEE_MANAGEMENT");
@@ -94,6 +99,7 @@ public class MainMenu extends JFrame {
 
         makeSaleButton.setEnabled(canMakeSale);
         viewSalesButton.setEnabled(canViewSales);
+        viewInventoryButton.setEnabled(canViewInventory);
         addItemButton.setEnabled(canAddItem);
         editItemsButton.setEnabled(canEditItem);
         employeeManagementButton.setEnabled(canEmployeeManagement);
@@ -108,10 +114,16 @@ public class MainMenu extends JFrame {
             openScreen(new MakeASale());
         });
         viewSalesButton.addActionListener(e -> {
-            if (!PermissionManager.requirePermission("MAKE_SALE", this, "View Sales")) {
+            if (!PermissionManager.requirePermission("VIEW_SALES", this, "View Sales")) {
                 return;
             }
             openScreen(new ViewSales());
+        });
+        viewInventoryButton.addActionListener(e -> {
+            if (!PermissionManager.requirePermission("VIEW_INVENTORY", this, "View Inventory")) {
+                return;
+            }
+            openScreen(new ViewInventory());
         });
         addItemButton.addActionListener(e -> {
             if (!PermissionManager.requirePermission("NEW_ITEM", this, "Add Item")) {
@@ -189,6 +201,10 @@ public class MainMenu extends JFrame {
 
     public JButton getViewSalesButton() {
         return viewSalesButton;
+    }
+
+    public JButton getViewInventoryButton() {
+        return viewInventoryButton;
     }
 
     public JButton getAddItemButton() {
