@@ -36,6 +36,7 @@ public class NewItem extends JFrame {
         setSize(840, 470);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setJMenuBar(AppMenuBar.create(this,"NewItem"));
 
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createCompoundBorder(
