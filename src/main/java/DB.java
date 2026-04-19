@@ -4,13 +4,13 @@ import java.sql.SQLException;
 
 public class DB {
     private static final String URL =
-            "jdbc:postgresql://aws-1-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require";
+            "jdbc:postgresql://aws-1-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require";
 
     private static final String USER =
-            "postgres.wbffhygkttoaaodjcvuh";
+            "postgres.dtprexymozpsrznuwtxd";
 
     private static final String PASSWORD =
-            "0VF07DnKCNeaenKe";
+            "dibzAc-qojqa5-taggaz";
 
     public static Connection getConnection() throws SQLException {
         try {
@@ -21,5 +21,3 @@ public class DB {
         }
     }
 }
-
-//0VF07DnKCNeaenKe
