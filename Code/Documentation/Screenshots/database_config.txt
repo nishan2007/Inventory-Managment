@@ -1,0 +1,11 @@
+DB.java runtime settings:
+
+  SMARTSTOCK_DB_URL
+  SMARTSTOCK_DB_USER
+  SMARTSTOCK_DB_PASSWORD
+
+Alternative Java system properties:
+
+  -Dsmartstock.db.url=...
+  -Dsmartstock.db.user=...
+  -Dsmartstock.db.password=...

@@ -1,0 +1,6 @@
+Import command:
+  psql -U <db_user> -d <db_name> -f SmartStock_Database_Export.sql
+
+Expected result:
+  PostgreSQL creates schema objects and inserts starter data
+  required by SmartStock for this submission version.

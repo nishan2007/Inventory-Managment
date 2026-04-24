@@ -1,0 +1,13 @@
+Code/Deployable/
+  inventory-management.jar
+  Run_SmartStock.command
+  src/ICONS/
+  src/Images/
+  CompiledClasses/
+
+Launch:
+  cd Code/Deployable
+  ./Run_SmartStock.command
+
+The image folders are included because the current
+application resolves UI assets from relative paths.
